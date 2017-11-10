@@ -10,12 +10,13 @@ public class CircleDetection {
     private static int[][] sobelY;
     private static double[][] sobelTotal;
     private static String path = System.getProperty("user.dir");
-	private static int maxX = 0;
-	private static int maxY = 0;
-	private static int maxR = 0;
+    private static int maxX = 0;
+    private static int maxY = 0;
+    private static int maxR = 0;
 
     public static void main(String[] args) throws Exception{
-        toGrayScale();
+        File originalFile = new File(args[0]);
+        toGrayScale(originalFile);
         edgeDetection();
         
 
@@ -94,8 +95,7 @@ public class CircleDetection {
         return ratio * (valueCoord1 - startCoord1) + startCoord2;
     }
 
-    private static void toGrayScale() throws Exception{
-        File f = new File(path+"\\image-test-edge.png");
+    private static void toGrayScale(File f) throws Exception{
         BufferedImage img = ImageIO.read(f);
         grey = new BufferedImage(img.getWidth(), img.getHeight(), img.TYPE_BYTE_GRAY);
         grey.getGraphics().drawImage(img, 0 , 0, null);

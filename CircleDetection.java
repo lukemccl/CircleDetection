@@ -3,6 +3,8 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.awt.image.RescaleOp;
 import java.io.File;
+import java.util.*;
+import java.util.List;
 
 public class CircleDetection {
     private static BufferedImage grey;
@@ -10,10 +12,9 @@ public class CircleDetection {
     private static int[][] sobelY;
     private static double[][] sobelTotal;
     private static String path = System.getProperty("user.dir");
-    private static int maxX = 0;
-    private static int maxY = 0;
-    private static int maxR = 0;
-    private static int threshold = 300;
+    private static int threshold = 150;
+    private static int drawnCircles = 1;
+    private static int minRad = 10;
 
     public static void main(String[] args) throws Exception{
         //ensures all the file systems required are in order
@@ -27,28 +28,20 @@ public class CircleDetection {
             }
         }
 
+        //arguments are [File Path] [Num Drawn Circles] [Sobel Threshold] [Minimum radius circle]
+        if(args.length>1){
+            if(args.length>2){
+                if(args.length>3){
+                    minRad = Integer.parseInt(args[3]);
+                }
+                threshold = Integer.parseInt(args[2]);
+            }
+            drawnCircles = Integer.parseInt(args[1]);
+        }
+
         //runs the required processes for circle detection, ie sobel edge detection
         toGrayScale(originalFile);
         edgeDetection();
-
-        //creates and outputs images for the sobel sweep in x and y direction, and the combined sobel output
-        BufferedImage img = new BufferedImage(grey.getWidth(), grey.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
-        for(int i = 0; i< grey.getWidth(); i++){
-            for(int j = 0; j<grey.getHeight(); j++){
-                img.setRGB(i, j, sobelX[i][j]);
-            }
-        }
-        File outX = new File(path+"\\result\\sobelX.png");
-        ImageIO.write(img, "png", outX);
-
-        BufferedImage ing = new BufferedImage(grey.getWidth(), grey.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
-        for(int i = 0; i< grey.getWidth(); i++){
-            for(int j = 0; j<grey.getHeight(); j++){
-                ing.setRGB(i, j, sobelY[i][j]);
-            }
-        }
-        File outY = new File(path+"\\result\\sobelY.png");
-        ImageIO.write(ing, "png", outY);
 
         BufferedImage total = new BufferedImage(grey.getWidth(), grey.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
         double max = 0;
@@ -69,34 +62,65 @@ public class CircleDetection {
             }
         }
         total = changeBrightness(20.0f, total);
-        File out2 = new File(path+"\\result\\sobelTotal.png");
-        ImageIO.write(total, "png", out2);
 
-        //outputs an image showing every pixel that is above the threshold
-        BufferedImage totalColour = new BufferedImage(grey.getWidth(), grey.getHeight(), BufferedImage.TYPE_INT_ARGB);
-        for(int i = 0; i < grey.getWidth(); i++) {
-        	for(int j = 0; j < grey.getHeight(); j++) {
-        		Color c1 = new Color(0,255,0);
-        		if(sobelTotal[i][j] > threshold) {
-        			totalColour.setRGB(i, j, c1.getRGB());
-        		}
-        	}
-        }
-        File outThreshold = new File(path+"\\result\\totalGreen.png");
-        ImageIO.write(totalColour, "png", outThreshold);
-        
+        createSobelImages(total);
+
         //runs circle detection and outputs an image of the original with the circle detected superimposed in red
         BufferedImage totalCircles = new BufferedImage(grey.getWidth(), grey.getHeight(), BufferedImage.TYPE_INT_ARGB);
-        circleDetection(total);
+        List<CircleHit> hits = circleDetection(total);
+        Collections.sort(hits, Collections.reverseOrder());
+
         total = changeBrightness(0.5f, total);
         totalCircles.getGraphics().drawImage(total, 0, 0, null);
         Graphics2D g = totalCircles.createGraphics();
         g.setColor(Color.RED);
-        double a =  maxX - maxR * Math.cos(0 * Math.PI / 180);
-        double b =  maxY - maxR * Math.sin(90 * Math.PI / 180);
-        g.drawOval((int)a,(int)b,2*maxR,2*maxR);
-        File outfinal = new File(path+"\\result\\totalCircles.png");
+        for(int circles = 0; circles<drawnCircles; circles++){
+            CircleHit toDraw = hits.get(circles);
+            double a =  toDraw.x - toDraw.r * Math.cos(0 * Math.PI / 180);
+            double b =  toDraw.y - toDraw.r * Math.sin(90 * Math.PI / 180);
+            g.drawOval((int)a,(int)b,2*toDraw.r,2*toDraw.r);
+        }
+
+        File outfinal = new File(path+"\\result\\detectedCircles.png");
         ImageIO.write(totalCircles, "png", outfinal);
+    }
+
+    private static void createSobelImages(BufferedImage total) throws Exception {
+
+        //creates and outputs images for the sobel sweep in x and y direction, and the combined sobel output
+        BufferedImage img = new BufferedImage(grey.getWidth(), grey.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        for(int i = 0; i< grey.getWidth(); i++){
+            for(int j = 0; j<grey.getHeight(); j++){
+                img.setRGB(i, j, sobelX[i][j]);
+            }
+        }
+        File outX = new File(path+"\\result\\sobelX.png");
+        ImageIO.write(img, "png", outX);
+
+        BufferedImage ing = new BufferedImage(grey.getWidth(), grey.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        for(int i = 0; i< grey.getWidth(); i++){
+            for(int j = 0; j<grey.getHeight(); j++){
+                ing.setRGB(i, j, sobelY[i][j]);
+            }
+        }
+        File outY = new File(path+"\\result\\sobelY.png");
+        ImageIO.write(ing, "png", outY);
+
+        //outputs an image showing every pixel that is above the threshold
+        BufferedImage totalColour = new BufferedImage(grey.getWidth(), grey.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        for(int i = 0; i < grey.getWidth(); i++) {
+            for(int j = 0; j < grey.getHeight(); j++) {
+                Color c1 = new Color(0,255,0);
+                if(sobelTotal[i][j] > threshold) {
+                    totalColour.setRGB(i, j, c1.getRGB());
+                }
+            }
+        }
+        File outThreshold = new File(path+"\\result\\sobelAboveThreshold.png");
+        ImageIO.write(totalColour, "png", outThreshold);
+
+        File out2 = new File(path+"\\result\\sobelTotal.png");
+        ImageIO.write(total, "png", out2);
     }
 
     //maps the given value between startCoord1 and endCoord1 to a value between startCoord2 and endCoord2
@@ -236,14 +260,15 @@ public class CircleDetection {
     //performs the algorithm to combine the horizontal sweep and vertical sweep
     private static void combineSobel(){
         sobelTotal = new double[grey.getWidth()][grey.getHeight()];
-        for(int i = 0; i <grey.getWidth(); i++){
-            for(int j = 0; j<grey.getHeight(); j++){
+        //indexing removes bright spots from perimeter of image
+        for(int i = 1; i <grey.getWidth()-1; i++){
+            for(int j = 1; j<grey.getHeight()-1; j++){
                 sobelTotal[i][j] = Math.round(Math.sqrt(Math.pow((double)sobelX[i][j],2) + Math.pow((double)sobelY[i][j],2)));
             }
         }
     }
     
-    private static void circleDetection(BufferedImage image) throws Exception {
+    private static List<CircleHit> circleDetection(BufferedImage image) throws Exception {
         //sets the radius relative to 1/6 of the smallest side of the image, helps reduce space taken in memory during
         //runtime
         int radius;
@@ -254,30 +279,24 @@ public class CircleDetection {
         }
         //sets a 3D space array of ints to hold 'hits' in x, y, and r planes
         int[][][] A = new int[image.getWidth()][image.getHeight()][radius];
+        int maxCol = 0;
 
-        BufferedImage newImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
-        for (int rad = 0; rad < radius; rad++) {
-            for (int x = 0; x < newImage.getWidth(); x++) {
-                for (int y = 0; y < newImage.getHeight(); y++) {
-                    //if the given pixel is above the threshold, a circle will be drawn at radius rad around it and if it
-                    //is a valid coordinate it will be accumulated in the A array and plotted in the pointSpace image
-                    if (sobelTotal[x][y] > threshold) {
+        BufferedImage houghSpace = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        for (int x = 0; x < houghSpace.getWidth(); x++) {
+            for (int y = 0; y < houghSpace.getHeight(); y++) {
+                //if the given pixel is above the threshold, a circle will be drawn at radius rad around it and if it
+                //is a valid coordinate it will be accumulated in the A array and plotted in the pointSpace image
+                if (sobelTotal[x][y] > threshold) {
+                    for (int rad = 1; rad < radius; rad++) {
                         for (int t = 0; t <= 360; t++) {
                             Integer a = (int) Math.floor(x - rad * Math.cos(t * Math.PI / 180));
                             Integer b = (int) Math.floor(y - rad * Math.sin(t * Math.PI / 180));
-                            if (!((0 > a || a > newImage.getWidth() - 1) || (0 > b || b > newImage.getHeight() - 1))) {
-                                Color c = new Color(newImage.getRGB(a, b));
-                                Color c1;
-                                if (c.getBlue() == 255) {
-                                    c1 = new Color(c.getRed(), c.getGreen() + 1, 0);
-                                } else if (c.getGreen() == 255) {
-                                    c1 = new Color(c.getRed() + 1, 0, c.getBlue());
-                                } else {
-                                    c1 = new Color(c.getRed(), c.getGreen(), c.getBlue() + 1);
-                                }
-                                newImage.setRGB(a, b, c1.getRGB());
-                                if (!(a.equals(x) && b.equals(y))) {
-                                   A[a][b][rad] += 1;
+
+                            //if a or b is outside the bounds of the image ignore
+                            if (!((0 > a || a > houghSpace.getWidth() - 1) || (0 > b || b > houghSpace.getHeight() - 1))) {
+                                A[a][b][rad] += 1;
+                                if(A[a][b][rad]>maxCol){
+                                    maxCol = A[a][b][rad];
                                 }
                             }
                         }
@@ -285,24 +304,34 @@ public class CircleDetection {
                 }
             }
         }
-        //iterates to find the max value in the A array
-        int max = 0;
-        for (int x = 0; x < image.getWidth(); x++) {
-            for (int y = 0; y < image.getHeight(); y++) {
-                for (int r = 5; r < radius; r++) {
-                    if (A[x][y][r] > max) {
-                        max = A[x][y][r];
-                        maxX = x;
-                        maxY = y;
-                        maxR = r;
-                    }
+        List<CircleHit> AList = new ArrayList<>();
+        for (int x = 0; x < houghSpace.getWidth(); x++) {
+            for (int y = 0; y < houghSpace.getHeight(); y++) {
+                for (int rad = minRad; rad < radius; rad++) {
+                    AList.add(new CircleHit(x,y,rad,A[x][y][rad]));
+
+                    int colour = (int) Math.floor(map(A[x][y][rad],0,maxCol, 0, 255));
+                    houghSpace.setRGB(x, y, new Color(255, 255, 255, colour).getRGB());
                 }
             }
         }
         //outputs the pointSpace image
-        System.out.println(maxX + " " + maxY + " " + maxR);
-        File newfile = new File(path + "\\result\\pointSpace.png");
-        ImageIO.write(newImage, "png", newfile);
+        File newfile = new File(path + "\\result\\houghSpace.png");
+        ImageIO.write(houghSpace, "png", newfile);
+
+        return AList;
+    }
+
+    private static Color incrementColourValue(Color c){
+        Color c1;
+        if (c.getBlue() == 255) {
+            c1 = new Color(c.getRed(), c.getGreen() + 1, 0);
+        } else if (c.getGreen() == 255) {
+            c1 = new Color(c.getRed() + 1, 0, c.getBlue());
+        } else {
+            c1 = new Color(c.getRed(), c.getGreen(), c.getBlue() + 1);
+        }
+        return c1;
     }
 
     //changes the brightness of an image by the factor given
@@ -310,5 +339,42 @@ public class CircleDetection {
         RescaleOp op = new RescaleOp(brightenFactor, 0, null);
         image = op.filter(image, image);
         return image;
+    }
+
+}
+
+class CircleHit implements Comparable<CircleHit>{
+
+    short x;
+    short y;
+    short r;
+    short AhitMag;
+
+    public CircleHit(int x, int y, int r){
+        this.x = (short) x;
+        this.y = (short) y;
+        this.r = (short) r;
+        this.AhitMag = 1;
+    }
+
+    public CircleHit(int x, int y, int r, int A){
+        this.x = (short) x;
+        this.y = (short) y;
+        this.r = (short) r;
+        this.AhitMag = (short) A;
+    }
+
+    public Short getAhitMag() {
+        return AhitMag;
+    }
+
+    public CircleHit incAHit(){
+        AhitMag+=1;
+        return this;
+    }
+
+    @Override
+    public int compareTo(CircleHit o) {
+        return Integer.compare(getAhitMag(), o.getAhitMag());
     }
 }

@@ -1,0 +1,4 @@
+*.png
+*.iml
+.idea/*
+out/*

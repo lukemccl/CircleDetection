@@ -12,7 +12,7 @@ public class CircleDetection {
     private static int imgWidth;
     private static int threshold = 150;
     private static int minRad = 10;
-    private static int maxRad = 2;
+    private static int maxRad = 0;
 
     public static void main(String[] args) throws Exception{
         //ensures all the file systems required are in order
@@ -26,7 +26,7 @@ public class CircleDetection {
             }
         }
 
-        //arguments are [File Path] [Num Drawn Circles] [Sobel Threshold] [Minimum radius circle] [Ratio of max radius to min dimension]
+        //arguments are [File Path] [Num Drawn Circles] [Sobel Threshold] [Minimum radius circle] [Max radius circle]
         if(args.length>1){
             if(args.length>2){
                 if(args.length>3){
@@ -69,16 +69,22 @@ public class CircleDetection {
     }
 
     private static double[][] blur(double[][] imgArray) {
-        double[][] base = new double[3][3];
-        base[0][0] = 0.05472;
-        base[1][0] = 0.11098;
-        base[2][0] = 0.05472;
-        base[0][1] = 0.11098;
-        base[1][1] = 0.22508;
-        base[2][1] = 0.11098;
-        base[0][2] = 0.05472;
-        base[1][2] = 0.11098;
-        base[2][2] = 0.05472;
+        double sigma = 1;    //must be >0
+        int width = 15;      //must be odd
+
+        int pad = (int) Math.floor(width/2);
+        double[][] base = new double[width][width];
+
+        //build gaussian kernel
+        double scaling = 1/(2*Math.PI* Math.pow(sigma, 2));
+
+        for(int x = -pad; x<=pad; x++){
+            for(int y = -pad; y<= pad; y++){
+                double components = (Math.pow(x,2) + Math.pow(y,2));
+                double exp = -(components/(2*Math.pow(sigma,2)));
+                base[x+pad][y+pad] = scaling * Math.exp(exp);
+            }
+        }
 
         return KernelSweep(imgArray, base);
     }
@@ -141,74 +147,28 @@ public class CircleDetection {
     }
 
     private static double[][] KernelSweep(double[][] base, double[][] kernel){
-        double[][] result = new double[imgWidth][imgHeight];
+        int paddingX = (int) Math.floor((double) kernel.length/2);
+        int paddingY = (int) Math.floor((double) kernel[0].length/2);
 
-        for(int i = 0; i<imgWidth; i++){
-            for(int j = 0; j<imgHeight;j++){
-                result[i][j] = getKernelResult(base, i,j,kernel);
+        double[][] result = new double[imgWidth][imgHeight];
+        double[][] padded = new double[imgWidth+paddingX][imgHeight+paddingY];
+
+        //pad base into padded
+        for(int x = paddingX; x<imgWidth; x++){
+            for(int y = paddingY; y<imgHeight;y++){
+                padded[x][y] = base[x-paddingX][y-paddingY];
             }
         }
 
-        return result;
-    }
+        //sweep over every value in padded
+        for(int x = paddingX; x<imgWidth; x++){
+            for(int y = paddingY; y<imgHeight;y++){
 
-    //a series of if statements to account for any edge cases to ensure no errors, calculates
-    //the sobel result for any pixel and kernel
-    private static double getKernelResult(double[][] base, int x, int y, double[][] kernel){
-        double result = 0;
-        if(x==0 && y ==0){
-            for(int i = 0; i <= 1; i++){
-                for(int j = 0; j <= 1; j++){
-                    result += base[x+i][y+j]*kernel[j+1][i+1];
-                }
-            }
-        }else if(x==0 && y==imgHeight-1){
-            for(int i = 0; i <= 1; i++){
-                for(int j = -1; j <= 0; j++){
-                    result += base[x+i][y+j]*kernel[j+1][i+1];
-                }
-            }
-        }else if(x==0 && y !=0){
-            for (int i = 0; i <= 1; i++) {
-                for (int j = -1; j <= 1; j++) {
-                    result += base[x+i][y+j]* kernel[j + 1][i + 1];
-                }
-            }
-
-        }else if(x==imgWidth-1 && y ==0){
-            for(int i = -1; i <= 0; i++){
-                for(int j = 0; j <= 1; j++){
-                    result += base[x+i][y+j]*kernel[j+1][i+1];
-                }
-            }
-        }else if(x!=0 && y ==0){
-            for(int i = -1; i <= 1; i++){
-                for(int j = 0; j <= 1; j++){
-                    result += base[x+i][y+j]*kernel[j+1][i+1];
-                }
-            }
-        }else if(x==imgWidth-1 && y==imgHeight-1){
-            for(int i = -1; i <= 0; i++){
-                for(int j = -1; j <= 0; j++){
-                    result += base[x+i][y+j]*kernel[j+1][i+1];
-                }
-            }
-        }else if(x==imgWidth-1 && y!=imgHeight-1){
-            for(int i = -1; i <= 0; i++){
-                for(int j = -1; j <= 1; j++){
-                    result += base[x+i][y+j]*kernel[j+1][i+1];
-                }
-            }
-        }else if(x!=imgWidth-1 && y==imgHeight-1){
-            for(int i = -1; i <= 1; i++){
-                for(int j = -1; j <= 0; j++){
-                    result += base[x+i][y+j]*kernel[j+1][i+1];
-                }
-            }
-        }else{
-            for(int i = -1; i <= 1; i++){
-                for(int j = -1; j <= 1; j++){
-                    result += base[x+i][y+j]*kernel[j+1][i+1];
+                //sweep kernel through point
+                for(int i = -paddingX; i <= paddingX; i++){
+                    for(int j = -paddingY; j <= paddingY; j++){
+                        result[x-paddingX][y-paddingY] += padded[x+i][y+j]*kernel[j+paddingY][i+paddingX];
+                    }
                 }
             }
         }
@@ -230,15 +190,9 @@ public class CircleDetection {
     }
     
     private static List<CircleHit> circleDetection(double[][] sobelTotal) throws Exception {
-        //sets the radius relative to 1/maxRad of the smallest side of the image, helps reduce space taken in memory during runtime
+        //sets the max radius of a circle, default 0 == min of height or width (biggest circle able to be displayed)
+        int radius = maxRad == 0 ? Integer.min(imgHeight, imgWidth) : maxRad;
 
-        //Default set to 1/6
-        int radius;
-        if (imgHeight < imgWidth) {
-            radius = imgHeight / maxRad;
-        } else {
-            radius = imgWidth / maxRad;
-        }
         //sets a 3D space array of ints to hold 'hits' in x, y, and r planes
         int[][][] A = new int[imgWidth][imgHeight][radius];
         int maxCol = 0;

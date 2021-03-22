@@ -7,5 +7,5 @@ Outputs 6 files to the root /results directory consisting of the horizontal and 
 
 Compile the program, call like any java program with arguments:
 
-[File Path] [Num Drawn Circles (default 1)] [Sobel Threshold (default 150)] [Minimum radius circle (default 10)] [Ratio of max circle radius to min dimension (default 2)]
+[File Path] [Num Drawn Circles (default 1)] [Sobel Threshold (default 150)] [Minimum radius circle (default 10)] [Max circle radius (default min side of input image)]
 
